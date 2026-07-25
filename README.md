@@ -61,3 +61,9 @@ SCROLLTWIN_CODESIGN_IDENTITY="Developer ID Application: ..." \
 ## 开源许可
 
 本项目以 [MIT License](LICENSE) 开源。
+
+## 浏览器滚动验证
+
+用 Safari 或 Chrome 打开 `tools/scroll-probe.html`，滚动后页面会显示浏览器
+实际渲染的帧间隔与位移数据。120Hz 显示器的理想帧间隔约为 8.33ms；
+这比只统计 ScrollTwin 发出的事件次数更能反映真实手感。

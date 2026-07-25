@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ScrollTwin Browser Probe</title>
+<style>
+  body { margin: 0; font: 14px -apple-system, sans-serif; }
+  #stats { position: fixed; inset: 16px auto auto 16px; padding: 12px 14px; border-radius: 10px; background: rgba(20,20,20,.82); color: white; z-index: 1; line-height: 1.55; }
+  #content { height: 400vh; background: repeating-linear-gradient(#fff 0 48px, #edf4ff 48px 96px); }
+</style>
+<div id="stats">滚动后会显示浏览器实际消费的滚动帧数据。</div><div id="content"></div>
+<script>
+  const samples = [];
+  let previousY = scrollY, previousTime = performance.now();
+  function frame(now) {
+    const delta = scrollY - previousY, interval = now - previousTime;
+    if (delta) samples.push({ delta, interval });
+    if (samples.length > 180) samples.shift();
+    const intervals = samples.map(s => s.interval).sort((a,b) => a-b);
+    const deltas = samples.map(s => Math.abs(s.delta));
+    const average = a => a.length ? a.reduce((x,y) => x+y,0)/a.length : 0;
+    const p95 = a => a.length ? a[Math.floor((a.length - 1) * .95)] : 0;
+    document.querySelector('#stats').textContent = [
+      '浏览器实际滚动帧：' + samples.length,
+      '平均帧间隔：' + average(intervals).toFixed(2) + ' ms',
+      'P95 帧间隔：' + p95(intervals).toFixed(2) + ' ms',
+      '平均每帧位移：' + average(deltas).toFixed(2) + ' px',
+      '提示：120Hz 显示器理想间隔约 8.33 ms。'
+    ].join('\n');
+    previousY = scrollY; previousTime = now;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>

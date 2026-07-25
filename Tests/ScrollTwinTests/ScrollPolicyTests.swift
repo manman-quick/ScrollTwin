@@ -209,6 +209,16 @@ final class ScrollPolicyTests: XCTestCase {
         XCTAssertEqual(total, 35, accuracy: 0.5)
     }
 
+    func testDiscreteEncoderPreservesFractionalDistance() {
+        var encoder = ScrollEventDeltaEncoder()
+        let frames = [0.25, 0.25, 0.25, 0.25]
+        let encoded = frames.map {
+            encoder.encode(SmoothScrollFrame(x: 0, y: $0)).discreteY
+        }
+
+        XCTAssertEqual(encoded, [0, 0, 0, 1])
+    }
+
     func testSmoothModelReversalDropsOldDirectionTail() {
         var model = SmoothScrollModel(step: 35, angularFrequency: 18)
         model.enqueue(deltaX: 0, deltaY: 1, multiplier: 1)

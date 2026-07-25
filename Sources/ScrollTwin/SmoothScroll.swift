@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreVideo
 
 enum SmoothScrollPreset: String, CaseIterable {
     case responsive
@@ -43,6 +44,30 @@ enum SmoothScrollPreset: String, CaseIterable {
 struct SmoothScrollFrame: Equatable {
     var x: Double
     var y: Double
+}
+
+struct ScrollEventDeltaEncoder {
+    private var carriedX = 0.0
+    private var carriedY = 0.0
+
+    mutating func encode(_ frame: SmoothScrollFrame) -> (
+        precise: SmoothScrollFrame,
+        discreteX: Int64,
+        discreteY: Int64
+    ) {
+        carriedX += frame.x
+        carriedY += frame.y
+        let discreteX = carriedX.rounded(.towardZero)
+        let discreteY = carriedY.rounded(.towardZero)
+        carriedX -= discreteX
+        carriedY -= discreteY
+        return (frame, Int64(discreteX), Int64(discreteY))
+    }
+
+    mutating func reset() {
+        carriedX = 0
+        carriedY = 0
+    }
 }
 
 struct SmoothScrollModel {
@@ -198,14 +223,17 @@ final class SmoothScrollEngine {
 
     private var preset: SmoothScrollPreset = .balanced
     private var model = SmoothScrollModel()
-    private var outputTimer: DispatchSourceTimer?
+    private var displayLink: CVDisplayLink?
     private let stateLock = NSLock()
     private var lastFrameTime: TimeInterval?
     private var touchSeriesActive = false
     private var lastFlags: CGEventFlags = []
-    private let outputInterval: TimeInterval = 1.0 / 120.0
+    private var deltaEncoder = ScrollEventDeltaEncoder()
+    private let encoderLock = NSLock()
 
-    deinit { stopOutputTimer() }
+    init() { createDisplayLink() }
+
+    deinit { stopDisplayLink() }
 
     static func isSynthetic(_ event: CGEvent) -> Bool {
         event.getIntegerValueField(.eventSourceUserData) ==
@@ -239,7 +267,7 @@ final class SmoothScrollEngine {
         )
         stateLock.unlock()
 
-        startOutputTimerIfNeeded()
+        startDisplayLinkIfNeeded()
     }
 
     func applyPreset(_ newPreset: SmoothScrollPreset) {
@@ -254,7 +282,7 @@ final class SmoothScrollEngine {
     }
 
     func cancel(sendEnd: Bool) {
-        stopOutputTimer()
+        stopDisplayLink()
 
         stateLock.lock()
         let shouldEndTouch = sendEnd && touchSeriesActive
@@ -263,6 +291,10 @@ final class SmoothScrollEngine {
         model.reset()
         touchSeriesActive = false
         stateLock.unlock()
+
+        encoderLock.lock()
+        deltaEncoder.reset()
+        encoderLock.unlock()
 
         if shouldEndTouch {
             post(
@@ -274,33 +306,49 @@ final class SmoothScrollEngine {
         }
     }
 
-    private func startOutputTimerIfNeeded() {
+    private func createDisplayLink() {
+        var newDisplayLink: CVDisplayLink?
+        guard CVDisplayLinkCreateWithActiveCGDisplays(&newDisplayLink) ==
+                kCVReturnSuccess,
+              let newDisplayLink else {
+            return
+        }
+        CVDisplayLinkSetOutputCallback(
+            newDisplayLink,
+            { _, _, _, _, _, context in
+                guard let context else { return kCVReturnError }
+                let engine = Unmanaged<SmoothScrollEngine>
+                    .fromOpaque(context)
+                    .takeUnretainedValue()
+                engine.emitFrame()
+                return kCVReturnSuccess
+            },
+            Unmanaged.passUnretained(self).toOpaque()
+        )
+        displayLink = newDisplayLink
+    }
+
+    private func startDisplayLinkIfNeeded() {
         stateLock.lock()
-        guard outputTimer == nil else {
+        if displayLink == nil {
+            stateLock.unlock()
+            createDisplayLink()
+            stateLock.lock()
+        }
+        guard let displayLink,
+              !CVDisplayLinkIsRunning(displayLink) else {
             stateLock.unlock()
             return
         }
         lastFrameTime = ProcessInfo.processInfo.systemUptime
-        let timer = DispatchSource.makeTimerSource(
-            queue: DispatchQueue(label: "com.hehongchi.ScrollTwin.smooth-scroll", qos: .userInteractive)
-        )
-        timer.schedule(
-            deadline: .now(),
-            repeating: outputInterval,
-            leeway: .milliseconds(1)
-        )
-        timer.setEventHandler { [weak self] in self?.emitFrame() }
-        outputTimer = timer
         stateLock.unlock()
-        timer.resume()
+        CVDisplayLinkStart(displayLink)
     }
 
-    private func stopOutputTimer() {
-        stateLock.lock()
-        let timer = outputTimer
-        outputTimer = nil
-        stateLock.unlock()
-        timer?.cancel()
+    private func stopDisplayLink() {
+        if let displayLink, CVDisplayLinkIsRunning(displayLink) {
+            CVDisplayLinkStop(displayLink)
+        }
     }
 
     private func emitFrame() {
@@ -345,7 +393,10 @@ final class SmoothScrollEngine {
             )
         }
         if isFinished {
-            stopOutputTimer()
+            encoderLock.lock()
+            deltaEncoder.reset()
+            encoderLock.unlock()
+            stopDisplayLink()
         }
     }
 
@@ -355,12 +406,15 @@ final class SmoothScrollEngine {
         momentumPhase: Int64,
         flags: CGEventFlags
     ) {
+        encoderLock.lock()
+        let encoded = deltaEncoder.encode(frame)
+        encoderLock.unlock()
         guard let event = CGEvent(
             scrollWheelEvent2Source: nil,
             units: .pixel,
             wheelCount: 2,
-            wheel1: roundedInt32(frame.y),
-            wheel2: roundedInt32(frame.x),
+            wheel1: clampedInt32(encoded.discreteY),
+            wheel2: clampedInt32(encoded.discreteX),
             wheel3: 0
         ) else { return }
 
@@ -375,19 +429,19 @@ final class SmoothScrollEngine {
         )
         event.setDoubleValueField(
             .scrollWheelEventFixedPtDeltaAxis1,
-            value: frame.y
+            value: encoded.precise.y
         )
         event.setDoubleValueField(
             .scrollWheelEventFixedPtDeltaAxis2,
-            value: frame.x
+            value: encoded.precise.x
         )
         event.setIntegerValueField(
             .scrollWheelEventPointDeltaAxis1,
-            value: Int64(frame.y.rounded())
+            value: encoded.discreteY
         )
         event.setIntegerValueField(
             .scrollWheelEventPointDeltaAxis2,
-            value: Int64(frame.x.rounded())
+            value: encoded.discreteX
         )
         event.setIntegerValueField(
             .scrollWheelEventScrollPhase,
@@ -400,7 +454,7 @@ final class SmoothScrollEngine {
         event.post(tap: .cghidEventTap)
     }
 
-    private func roundedInt32(_ value: Double) -> Int32 {
-        Int32(min(max(value.rounded(), Double(Int32.min)), Double(Int32.max)))
+    private func clampedInt32(_ value: Int64) -> Int32 {
+        Int32(min(max(value, Int64(Int32.min)), Int64(Int32.max)))
     }
 }
