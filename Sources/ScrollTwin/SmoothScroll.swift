@@ -53,6 +53,9 @@ struct SmoothScrollModel {
     private(set) var velocityX = 0.0
     private(set) var velocityY = 0.0
 
+    private static let settleDistance = 0.35
+    private static let settleVelocity = 6.0
+
     let step: Double
     let angularFrequency: Double
 
@@ -173,11 +176,14 @@ struct SmoothScrollModel {
         position = target + newDisplacement
         velocity = newVelocity
         let movement = position - oldPosition
-        if abs(target - position) < 0.05, abs(velocity) < 0.5 {
-            let finalMovement = movement + target - position
+        // The remaining fraction is below one visible pixel. Sending a final
+        // rounded event here produces the familiar last-step hitch in apps
+        // that ignore fixed-point deltas, so end the series cleanly instead.
+        if abs(target - position) < Self.settleDistance,
+           abs(velocity) < Self.settleVelocity {
             position = target
             velocity = 0
-            return finalMovement
+            return 0
         }
         return movement
     }
@@ -195,11 +201,8 @@ final class SmoothScrollEngine {
     private var outputTimer: DispatchSourceTimer?
     private let stateLock = NSLock()
     private var lastFrameTime: TimeInterval?
-    private var lastInputTime: TimeInterval?
     private var touchSeriesActive = false
-    private var momentumSeriesActive = false
     private var lastFlags: CGEventFlags = []
-    private let inputGrace: TimeInterval = 0.08
     private let outputInterval: TimeInterval = 1.0 / 120.0
 
     deinit { stopOutputTimer() }
@@ -227,15 +230,8 @@ final class SmoothScrollEngine {
 
         guard deltaX != 0 || deltaY != 0 else { return }
 
-        let now = ProcessInfo.processInfo.systemUptime
         stateLock.lock()
-        let wasMomentumActive = momentumSeriesActive
-        if wasMomentumActive {
-            momentumSeriesActive = false
-            touchSeriesActive = false
-        }
         lastFlags = event.flags
-        lastInputTime = now
         model.enqueue(
             deltaX: deltaX,
             deltaY: deltaY,
@@ -243,14 +239,6 @@ final class SmoothScrollEngine {
         )
         stateLock.unlock()
 
-        if wasMomentumActive {
-            post(
-                frame: SmoothScrollFrame(x: 0, y: 0),
-                scrollPhase: 0,
-                momentumPhase: 4,
-                flags: event.flags
-            )
-        }
         startOutputTimerIfNeeded()
     }
 
@@ -269,24 +257,14 @@ final class SmoothScrollEngine {
         stopOutputTimer()
 
         stateLock.lock()
-        let shouldEndMomentum = sendEnd && momentumSeriesActive
         let shouldEndTouch = sendEnd && touchSeriesActive
         let flags = lastFlags
         lastFrameTime = nil
-        lastInputTime = nil
         model.reset()
         touchSeriesActive = false
-        momentumSeriesActive = false
         stateLock.unlock()
 
-        if shouldEndMomentum {
-            post(
-                frame: SmoothScrollFrame(x: 0, y: 0),
-                scrollPhase: 0,
-                momentumPhase: 4,
-                flags: flags
-            )
-        } else if shouldEndTouch {
+        if shouldEndTouch {
             post(
                 frame: SmoothScrollFrame(x: 0, y: 0),
                 scrollPhase: 4,
@@ -333,8 +311,6 @@ final class SmoothScrollEngine {
 
         let frame = model.advance(by: elapsed)
         let hasMovement = frame.x != 0 || frame.y != 0
-        let inputIsFresh =
-            lastInputTime.map { now - $0 <= inputGrace } ?? false
         let flags = lastFlags
 
         var events: [(
@@ -343,42 +319,20 @@ final class SmoothScrollEngine {
             momentumPhase: Int64
         )] = []
 
-        if inputIsFresh, hasMovement {
-            if momentumSeriesActive {
-                events.append((
-                    SmoothScrollFrame(x: 0, y: 0), 0, 4
-                ))
-                momentumSeriesActive = false
-                touchSeriesActive = false
-            }
+        if hasMovement {
             events.append((frame, touchSeriesActive ? 2 : 1, 0))
             touchSeriesActive = true
-        } else if hasMovement {
-            if touchSeriesActive {
-                events.append((
-                    SmoothScrollFrame(x: 0, y: 0), 4, 0
-                ))
-                touchSeriesActive = false
-            }
-            events.append((frame, 0, momentumSeriesActive ? 2 : 1))
-            momentumSeriesActive = true
         }
 
         let isFinished = !model.hasPendingMotion
         if isFinished {
-            if momentumSeriesActive {
-                events.append((
-                    SmoothScrollFrame(x: 0, y: 0), 0, 4
-                ))
-            } else if touchSeriesActive {
+            if touchSeriesActive {
                 events.append((
                     SmoothScrollFrame(x: 0, y: 0), 4, 0
                 ))
             }
             touchSeriesActive = false
-            momentumSeriesActive = false
             lastFrameTime = nil
-            lastInputTime = nil
         }
         stateLock.unlock()
 

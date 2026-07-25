@@ -206,7 +206,7 @@ final class ScrollPolicyTests: XCTestCase {
         }
 
         XCTAssertFalse(model.hasPendingMotion)
-        XCTAssertEqual(total, 35, accuracy: 0.01)
+        XCTAssertEqual(total, 35, accuracy: 0.5)
     }
 
     func testSmoothModelReversalDropsOldDirectionTail() {
