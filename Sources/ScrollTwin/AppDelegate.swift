@@ -35,7 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             userInfo: nil,
             repeats: true
         )
-        showSettings()
+        // A background utility should not interrupt the user on every launch.
+        // The menu-bar item remains the normal route to settings once access
+        // has already been granted.
+        if scrollController.state == .needsAccessibilityPermission {
+            showSettings()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
