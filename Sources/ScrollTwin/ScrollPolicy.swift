@@ -15,7 +15,9 @@ struct ScrollSourceClassifier {
     private var touchingFingerCount = 0
 
     mutating func observeGesture(touchingFingers: Int, at time: TimeInterval) {
-        guard touchingFingers >= 2 else { return }
+        // A trackpad commonly reports two fingers, while Magic Mouse reports
+        // one. Both are direct-touch scroll surfaces, unlike a wheel event.
+        guard touchingFingers >= 1 else { return }
         lastTouchTime = time
         touchingFingerCount = max(touchingFingerCount, touchingFingers)
     }
@@ -35,7 +37,7 @@ struct ScrollSourceClassifier {
 
         let elapsed = lastTouchTime.map { time - $0 } ?? .infinity
 
-        if touchingFingerCount >= 2, elapsed < 0.222 {
+        if touchingFingerCount >= 1, elapsed < 0.222 {
             lastSource = .touchSurface
             return lastSource
         }

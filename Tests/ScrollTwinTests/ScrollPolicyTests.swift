@@ -64,6 +64,21 @@ final class ScrollPolicyTests: XCTestCase {
         )
     }
 
+    func testSingleFingerGestureClassifiesMagicMouseTouchSurface() {
+        var classifier = ScrollSourceClassifier()
+        classifier.observeGesture(touchingFingers: 1, at: 10)
+
+        XCTAssertEqual(
+            classifier.classify(
+                isContinuous: true,
+                hasMomentumPhase: false,
+                sourceProcessID: 0,
+                at: 10.1
+            ),
+            .touchSurface
+        )
+    }
+
     func testTrackpadMomentumKeepsPreviousSource() {
         var classifier = ScrollSourceClassifier()
         classifier.observeGesture(touchingFingers: 2, at: 10)

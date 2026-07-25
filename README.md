@@ -26,8 +26,8 @@ macOS 原生滚动和惯性，不做二次平滑。
 4. 以后需要设置时，从“应用程序”、访达或 Spotlight 再次打开
    ScrollTwin。
 
-ScrollTwin 不创建菜单栏图标，且作为 `LSUIElement` 后台应用运行，
-不会出现在程序坞中。
+ScrollTwin 作为 `LSUIElement` 后台应用运行，不会出现在程序坞中；
+菜单栏会显示 ScrollTwin 图标，可随时查看状态、开关平滑滚动或打开设置。
 
 菜单中的“反转”是在 macOS 当前“自然滚动”设置基础上进行反转。
 使用 ScrollTwin 平滑滚动时，请关闭 Mos 或其他工具中的平滑滚动，
