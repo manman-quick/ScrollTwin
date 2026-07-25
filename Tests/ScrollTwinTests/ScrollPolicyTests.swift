@@ -219,6 +219,17 @@ final class ScrollPolicyTests: XCTestCase {
         XCTAssertEqual(encoded, [0, 0, 0, 1])
     }
 
+    func testDiscreteEncoderDoesNotEmitFinalSinglePixelFallback() {
+        var encoder = ScrollEventDeltaEncoder()
+        _ = encoder.encode(SmoothScrollFrame(x: 0, y: 0.8))
+        let final = encoder.encode(
+            SmoothScrollFrame(x: 0, y: 0.3),
+            suppressDiscreteFallback: true
+        )
+
+        XCTAssertEqual(final.discreteY, 0)
+    }
+
     func testSmoothModelReversalDropsOldDirectionTail() {
         var model = SmoothScrollModel(step: 35, angularFrequency: 18)
         model.enqueue(deltaX: 0, deltaY: 1, multiplier: 1)

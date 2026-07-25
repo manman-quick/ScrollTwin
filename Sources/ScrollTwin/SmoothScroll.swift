@@ -55,6 +55,25 @@ struct ScrollEventDeltaEncoder {
         discreteX: Int64,
         discreteY: Int64
     ) {
+        encode(frame, suppressDiscreteFallback: false)
+    }
+
+    mutating func encode(
+        _ frame: SmoothScrollFrame,
+        suppressDiscreteFallback: Bool
+    ) -> (
+        precise: SmoothScrollFrame,
+        discreteX: Int64,
+        discreteY: Int64
+    ) {
+        // Browsers that honor precise deltas keep receiving the tiny tail.
+        // For older integer-only consumers, suppressing the final fractional
+        // accumulator avoids a lone 1px event immediately before the end.
+        if suppressDiscreteFallback {
+            carriedX = 0
+            carriedY = 0
+            return (frame, 0, 0)
+        }
         carriedX += frame.x
         carriedY += frame.y
         let discreteX = carriedX.rounded(.towardZero)
@@ -407,7 +426,11 @@ final class SmoothScrollEngine {
         flags: CGEventFlags
     ) {
         encoderLock.lock()
-        let encoded = deltaEncoder.encode(frame)
+        let encoded = deltaEncoder.encode(
+            frame,
+            suppressDiscreteFallback:
+                max(abs(frame.x), abs(frame.y)) < 0.35
+        )
         encoderLock.unlock()
         guard let event = CGEvent(
             scrollWheelEvent2Source: nil,
