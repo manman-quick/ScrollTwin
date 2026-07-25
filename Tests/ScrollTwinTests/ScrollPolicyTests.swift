@@ -185,13 +185,13 @@ final class ScrollPolicyTests: XCTestCase {
         var model = SmoothScrollModel(step: 35, angularFrequency: 18)
         model.enqueue(deltaX: 0, deltaY: 1, multiplier: 1)
 
-        var total: Int32 = 0
+        var total = 0.0
         for _ in 0..<300 where model.hasPendingMotion {
             total += model.advance(by: 1.0 / 120.0).y
         }
 
         XCTAssertFalse(model.hasPendingMotion)
-        XCTAssertEqual(total, 35, accuracy: 1)
+        XCTAssertEqual(total, 35, accuracy: 0.01)
     }
 
     func testSmoothModelReversalDropsOldDirectionTail() {
@@ -199,7 +199,7 @@ final class ScrollPolicyTests: XCTestCase {
         model.enqueue(deltaX: 0, deltaY: 1, multiplier: 1)
         var beganMovingWithinResponseWindow = false
         for _ in 0..<6 {
-            if model.advance(by: 1.0 / 120.0).y > 0 {
+            if model.advance(by: 1.0 / 120.0).y > 0.01 {
                 beganMovingWithinResponseWindow = true
                 break
             }
@@ -209,7 +209,7 @@ final class ScrollPolicyTests: XCTestCase {
         model.enqueue(deltaX: 0, deltaY: -1, multiplier: 1)
         var reversedWithinResponseWindow = false
         for _ in 0..<12 {
-            if model.advance(by: 1.0 / 120.0).y < 0 {
+            if model.advance(by: 1.0 / 120.0).y < -0.01 {
                 reversedWithinResponseWindow = true
                 break
             }
