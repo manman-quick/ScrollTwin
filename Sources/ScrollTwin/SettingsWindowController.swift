@@ -186,7 +186,7 @@ final class SettingsWindowController: NSWindowController {
         directionHint.textColor = .secondaryLabelColor
 
         let smoothingLabel = NSTextField(
-            labelWithString: "平滑手感"
+            labelWithString: "动画响应 / 停下速度"
         )
         smoothingLabel.font = .systemFont(ofSize: 13, weight: .medium)
 
@@ -197,11 +197,11 @@ final class SettingsWindowController: NSWindowController {
 
         let smoothingHint = NSTextField(
             wrappingLabelWithString:
-                "请关闭 Mos 或其他工具中的平滑滚动，避免重复处理。"
+                "灵敏会更快跟随输入并更快停下；柔和会延长动画尾部。不会改变每格滚动距离。"
         )
         smoothingHint.textColor = .secondaryLabelColor
 
-        let speedLabel = NSTextField(labelWithString: "滚动速度")
+        let speedLabel = NSTextField(labelWithString: "滚动距离（每一格）")
         speedLabel.font = .systemFont(ofSize: 13, weight: .medium)
         let wheelSpeedRow = speedRow(
             title: "普通鼠标滚轮",
@@ -215,7 +215,7 @@ final class SettingsWindowController: NSWindowController {
         )
         let speedHint = NSTextField(
             wrappingLabelWithString:
-                "速度会立即生效；触控板仍保留 macOS 原生手势和惯性。"
+                "距离会立即生效。普通鼠标的动画响应在上方设置；触控板仍保留 macOS 原生手势和惯性。"
         )
         speedHint.textColor = .secondaryLabelColor
 

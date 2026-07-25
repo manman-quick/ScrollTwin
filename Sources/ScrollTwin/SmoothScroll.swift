@@ -10,11 +10,11 @@ enum SmoothScrollPreset: String, CaseIterable {
     var title: String {
         switch self {
         case .responsive:
-            return "灵敏"
+            return "灵敏（更快停下）"
         case .balanced:
             return "均衡"
         case .soft:
-            return "柔和"
+            return "柔和（更慢停下）"
         }
     }
 
